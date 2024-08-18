@@ -1,0 +1,310 @@
+---
+title: "DataMining_Project"
+format: html
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+```{r}
+print(getwd())
+```
+
+```{r}
+data <- read.csv("Accidental_Drug_Related_Deaths.csv", na.strings = c("", "NA", "N/A"))
+print(head(data))
+```
+
+```{r}
+print(nrow(data))
+print(ncol(data))
+null_values <- colSums(is.na(data))
+
+# Print the results as a table
+print(null_values)
+
+```
+
+```{r}
+
+neglectable_null_values=c("Age","Sex","DeathCityGeo")
+
+
+data <- data[complete.cases(data$Age), ]
+data <- data[complete.cases(data$Race), ]
+data <- data[complete.cases(data$Sex), ]
+data <- data[complete.cases(data$Injury.Place), ]
+data <- data[complete.cases(data$Location), ]
+data <- data[complete.cases(data$DeathCityGeo ), ]
+
+
+null_values <- colSums(is.na(data))
+
+# Print the results as a table
+print(null_values)
+```
+
+Removing the columns which are not necessary for the analysis like Date. Type , Date.Type,Ethnicity,Heroin.death.certificate..DC.,Manner.of.Death,location.if.other
+
+```{r}
+
+df1 <- subset(data, select = -c(Date.Type,Ethnicity,Heroin.death.certificate..DC.,Manner.of.Death,Location.if.Other,Injury.County,Other.Significant.Conditions,InjuryCityGeo,Injury.City,Injury.State,Residence.City,Residence.County,Residence.State,Death.County,Death.State,Description.of.Injury,Death.City,ResidenceCityGeo))
+
+
+```
+
+```{r}
+
+# List of columns to modify
+columns_to_modify <- c("Heroin", "Cocaine", "Fentanyl", "Fentanyl.Analogue","Oxycodone", "Oxymorphone", "Ethanol", "Hydrocodone","Benzodiazepine", "Methadone", "Meth.Amphetamine", "Amphet", "Tramad", "Hydromorphone","Morphine..Not.Heroin.","Xylazine","Gabapentin","Opiate.NOS","Heroin.Morph.Codeine","Other.Opioid","Any.Opioid","Other")
+
+# Iterate through columns
+for (column in columns_to_modify) {
+  # Replace NA values with 0
+ df1[[column]] <- ifelse(is.na(df1[[column]]), 0, df1[[column]])
+   # Replace "Y" values with 1
+  df1[[column]] <- ifelse(df1[[column]] == "Y", 1, df1[[column]])
+
+}
+write.csv(df1, "df1.csv")
+head(df1)
+
+```
+
+```{r}
+null_values <- colSums(is.na(df1))
+
+# Print the results as a table
+null_values
+```
+
+```{r}
+
+# Convert the character column to a date
+df1$Date <- as.Date(df1$Date, format = "%m/%d/%Y")
+
+
+```
+
+```{r}
+library(lubridate)
+# Extract the year
+df1$year <- year(df1$Date)
+head(df1)
+```
+
+```{r}
+library(ggplot2)
+plot(density(df1$year))
+```
+
+**Relation between Year and Death rate**
+
+```{r}
+# Create a frequency table and store it in a data frame
+year_counts <- as.data.frame(table(df1$year))
+colnames(year_counts) <- c("year", "count")
+year_counts
+
+library(ggplot2)
+
+# Plotting the histogram
+ggplot(df1, aes(x = year)) +
+  geom_histogram(binwidth=0.95,fill = 'skyblue', color = 'skyblue', alpha = 0.7) +
+  labs(title = 'Distribution of death rate by year', x = 'Year', y = 'Frequency') +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+a<- df1$DeathCityGeo[1]
+split_values <- strsplit(a, "\n")[[1]]
+values_after_newline <- split_values[2]
+
+values_after_newline
+```
+
+```{r}
+df1$geo <- sapply(strsplit(df1$DeathCityGeo, "\n"), function(x) x[2])
+df1$loc <- sapply(strsplit(df1$DeathCityGeo, "\n"), function(x) x[1])
+
+```
+
+```{r}
+# Assuming your data frame is named 'df' and the column is named 'geo'
+df1$geo <- gsub("[()]", "", df1$geo)  # Remove parentheses
+df1$latitude_longitude <- strsplit(df1$geo, ", ")
+df1$deathcity <- strsplit(df1$loc, ", ")
+
+# Extract latitude and longitude into separate columns
+df1$latitude <- sapply(df1$latitude_longitude, function(x) as.numeric(x[1]))
+df1$longitude <- sapply(df1$latitude_longitude, function(x) as.numeric(x[2]))
+df1$deathcity <- sapply(df1$deathcity, function(x) x[1])
+
+
+
+```
+
+```{r}
+df2 <- subset(df1, select = -c(geo,latitude_longitude,loc))
+null_values <- colSums(is.na(df2))
+
+# Print the results as a table
+print(null_values)
+colnames(df2)
+```
+
+```{r}
+
+
+library(leaflet)
+library(leaflet.extras)
+
+
+
+locations <- data.frame(
+  lat = df2$latitude,   # Example latitudes
+  lon = df2$longitude   # Example longitudes
+)
+
+# Create leaflet map with marker clustering
+map <- leaflet() %>%
+  addTiles() %>%
+  addMarkers(
+    data = locations,
+    clusterOptions = markerClusterOptions()
+  )
+
+# Display the map
+#saveWidget(map, file = "clustered_map.html")
+htmlwidgets::saveWidget(map, file = "clustered_map.html")
+map
+```
+
+```{r}
+Heroin_data <- subset(df2, Heroin == 1)
+
+
+library(leaflet)
+library(leaflet.extras)
+
+
+# Generate example data with 10,000 points
+
+locations <- data.frame(
+  lat = Heroin_data$latitude,   # Example latitudes
+  lon = Heroin_data$longitude   # Example longitudes
+)
+
+# Create leaflet map with marker clustering
+map <- leaflet() %>%
+  addTiles() %>%
+  addHeatmap(
+    data = locations,
+    lng = ~lon,
+    lat = ~lat
+  )
+# Display the map
+#saveWidget(map, file = "clustered_map.html")
+#htmlwidgets::saveWidget(map, file = "clustered_map.html")
+map
+```
+
+```{r}
+str(df2)
+
+# Summarize the data frame
+summary(df2)
+```
+
+```{r}
+
+
+library(stats)
+library(ggplot2)
+
+# Perform k-means clustering with 5 clusters
+kmeans_clusters <- kmeans(df2[, c("longitude", "latitude")], 3)
+
+# Create a scatter plot with clustered points
+ggplot(df2, aes(x = longitude, y = latitude, color = factor(kmeans_clusters$cluster))) +
+  geom_point() +
+  scale_color_manual(values = c("blue", "green", "red", "purple", "orange")) +
+  labs(title = "K-Means Clustering") +
+  theme_minimal()
+```
+
+```{r}
+library(tigris)
+library(ggplot2)
+library(dplyr)
+
+
+counties_df = counties(state="CT", cb=TRUE)
+
+ggplot() +
+  geom_sf(data=counties_df, fill="grey", color="darkgrey", alpha=0.1) +
+  geom_point(data=df2, aes(x = longitude, y = latitude))
+
+```
+
+```{r}
+library(dbscan)
+library(fpc)
+
+# Create a matrix of coordinates
+coordinates = df2[c("longitude", "latitude")]
+
+
+res_optics = optics(coordinates,minPts = 150)
+
+# Plot the Reachability Plot
+plot(res_optics,cluster = True)
+
+abline(h = 0.1, col = "red")
+```
+
+```{r}
+library(cluster)
+
+# Assuming you have the result of the extractDBSCAN function
+res_extract_dbscan = extractDBSCAN(res_optics,eps_cl=0.06)
+
+# Get cluster assignments
+clusters = res_extract_dbscan$cluster
+
+dist_matrix = df2 %>%
+  select(latitude, longitude) %>%
+  dist()
+res_sil = silhouette(clusters, dist_matrix)
+res_sil_tibble= as_tibble(res_sil)
+```
+
+```{r}
+# Assuming you have the result of the extractDBSCAN function
+res_extract_dbscan = extractDBSCAN(res_optics,eps_cl=0.1)
+
+# Get cluster assignments
+clusters = res_extract_dbscan$cluster
+
+# Get silhouette coefficients
+sil_coef = res_sil[, 3]
+
+# Combine cluster information with silhouette coefficients
+df = cbind(df2, clusters, sil_coef)
+
+library(ggplot2)
+
+df = cbind(df2, clusters, sil_coef)
+
+ggplot() +
+geom_sf(data=counties_df, fill="grey", color="darkgrey", alpha=0.1) +
+geom_point(data=df%>% filter(clusters != 0), aes(x=longitude, y=latitude, color = factor(clusters)))  +
+  labs(title = "Connecticut Locations (Excluding Noise Cluster)",
+       subtitle = "Each color represents a different cluster",
+       color = "Cluster") + 
+  theme_minimal()
+```
